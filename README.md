@@ -15,29 +15,23 @@ This repository also includes `netpulse.ps1`, a Windows Forms PowerShell edition
 - **Remove**: Remove a target from the monitor table.
 - **Clear Log**: Clear messages in the activity log panel.
 
-## Build & run
+## Run locally
 
-This project ships with a `Makefile` and `configure` script to validate a minimal local toolchain.
+This is a static application, so no build step is required.
 
-1. Validate local dependencies:
+1. (Optional) Validate local dependencies:
 
    ```bash
    ./configure
    ```
 
-2. Run project checks:
+2. Launch a local static server:
 
    ```bash
-   make verify
+   python3 -m http.server 8080
    ```
 
-3. Launch a local static server:
-
-   ```bash
-   make serve
-   ```
-
-4. Open `http://localhost:8080` in your browser.
+3. Open `http://localhost:8080` in your browser.
 
 ## PowerShell edition (`netpulse.ps1`)
 
