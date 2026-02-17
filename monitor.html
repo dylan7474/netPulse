@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetPulse Pro | Network Health Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        .traffic-light {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .light-green { background-color: #22c55e; box-shadow: 0 0 12px #22c55e; }
+        .light-amber { background-color: #f59e0b; box-shadow: 0 0 12px #f59e0b; }
+        .light-red { background-color: #ef4444; box-shadow: 0 0 12px #ef4444; }
+        .light-off { background-color: #334155; box-shadow: none; }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .pulse {
+            animation: pulse-animation 2s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 p-2 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
+                    </div>
+                    <h1 class="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">
+                        NetPulse Pro
+                    </h1>
+                </div>
+                <p class="text-slate-400 text-sm mt-1">Advanced real-time endpoint diagnostics</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-3 items-center">
+                <div class="flex items-center gap-2 mr-4 bg-slate-800/50 px-3 py-2 rounded-lg border border-slate-700">
+                    <input type="checkbox" id="autoStartCheck" class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600">
+                    <label for="autoStartCheck" class="text-xs font-semibold text-slate-300 cursor-pointer uppercase tracking-wider">Auto-Start</label>
+                </div>
+                <button id="saveBtn" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-semibold border border-slate-700 transition flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+                    Save
+                </button>
+                <button id="toggleBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-emerald-900/20 transition-all flex items-center gap-2">
+                    <span id="toggleText">Start Monitoring</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            
+            <!-- Sidebar Stats & Add -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Stats -->
+                <div class="glass-panel rounded-2xl p-6 space-y-6">
+                    <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Network Overview</h2>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-end">
+                            <span class="text-slate-400 text-sm">Targets</span>
+                            <span id="statTotal" class="text-xl font-bold mono">0/5</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                            <div id="statBar" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 pt-2">
+                            <div class="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                                <p class="text-[10px] uppercase font-bold text-emerald-500 mb-1">Healthy</p>
+                                <p id="statHealthy" class="text-xl font-bold text-emerald-400 mono">0</p>
+                            </div>
+                            <div class="bg-red-500/10 p-3 rounded-xl border border-red-500/20">
+                                <p class="text-[10px] uppercase font-bold text-red-500 mb-1">Critical</p>
+                                <p id="statCritical" class="text-xl font-bold text-red-400 mono">0</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add Target -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Add New Target</h2>
+                    <div class="space-y-3">
+                        <input type="text" id="urlInput" placeholder="example.com" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-200 text-sm">
+                        <button id="addBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-900/20 transition-all flex justify-center items-center gap-2">
+                            Add to Monitor
+                        </button>
+                        <p id="limitWarning" class="text-amber-500 text-[10px] text-center uppercase font-bold hidden">Target capacity reached</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Monitor Table -->
+            <div class="lg:col-span-3 space-y-6">
+                <div class="glass-panel rounded-2xl overflow-hidden shadow-2xl">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b border-slate-700 bg-slate-800/30">
+                                    <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Target</th>
+                                    <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Status</th>
+                                    <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Latency</th>
+                                    <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Health Trend</th>
+                                    <th class="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monitorBody">
+                                <!-- Rows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Live Log -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Activity Log</h2>
+                        <button id="clearLogBtn" class="text-[10px] font-bold text-slate-500 hover:text-slate-300 uppercase tracking-widest">Clear Log</button>
+                    </div>
+                    <div id="logContainer" class="h-40 overflow-y-auto custom-scrollbar space-y-2 text-xs mono">
+                        <div class="text-slate-600 italic">No activity recorded yet...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="toast" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 glass-panel px-6 py-3 rounded-full shadow-2xl transition-all duration-500 opacity-0 translate-y-10 pointer-events-none border-l-4">
+            <span id="toastMsg" class="text-sm font-semibold"></span>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration & State ---
+        let targets = [];
+        let isMonitoring = false;
+        let monitorInterval = null;
+        const MAX_TARGETS = 5;
+        const PING_INTERVAL = 3000; 
+
+        // DOM
+        const monitorBody = document.getElementById('monitorBody');
+        const urlInput = document.getElementById('urlInput');
+        const addBtn = document.getElementById('addBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const toggleText = document.getElementById('toggleText');
+        const statTotal = document.getElementById('statTotal');
+        const statBar = document.getElementById('statBar');
+        const statHealthy = document.getElementById('statHealthy');
+        const statCritical = document.getElementById('statCritical');
+        const limitWarning = document.getElementById('limitWarning');
+        const logContainer = document.getElementById('logContainer');
+        const clearLogBtn = document.getElementById('clearLogBtn');
+        const autoStartCheck = document.getElementById('autoStartCheck');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toastMsg');
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substring(2);
+        }
+
+        // --- Core Logic ---
+
+        function init() {
+            loadConfig();
+            renderTable();
+            updateStats();
+            checkLimit();
+
+            if (autoStartCheck.checked && targets.length > 0) {
+                toggleMonitoring();
+            }
+        }
+
+        function addTarget() {
+            const urlValue = urlInput.value.trim();
+            if (!urlValue) return;
+            
+            let formattedUrl = urlValue;
+            if (!/^https?:\/\//i.test(urlValue)) {
+                formattedUrl = 'https://' + urlValue;
+            }
+
+            if (targets.length >= MAX_TARGETS) {
+                showToast("Limit reached", "red");
+                return;
+            }
+
+            const newTarget = {
+                id: generateId(),
+                url: formattedUrl,
+                history: [], // {timestamp, success, latency}
+                status: 'off',
+                latency: 0
+            };
+
+            targets.push(newTarget);
+            urlInput.value = '';
+            addLog(`Target added: ${formattedUrl}`, 'info');
+            renderTable();
+            updateStats();
+            checkLimit();
+        }
+
+        function removeTarget(id) {
+            const t = targets.find(x => x.id === id);
+            if (t) addLog(`Target removed: ${t.url}`, 'info');
+            targets = targets.filter(t => t.id !== id);
+            renderTable();
+            updateStats();
+            checkLimit();
+        }
+
+        function renderTable() {
+            monitorBody.innerHTML = '';
+            
+            if (targets.length === 0) {
+                monitorBody.innerHTML = `<tr><td colspan="5" class="px-6 py-12 text-center text-slate-500 italic text-sm">No active targets...</td></tr>`;
+                return;
+            }
+
+            targets.forEach(target => {
+                const now = Date.now();
+                const drops30s = target.history.filter(h => !h.success && (now - h.timestamp) < 30000).length;
+                const drops60s = target.history.filter(h => !h.success && (now - h.timestamp) < 60000).length;
+
+                // Create sparkline
+                const sparkline = generateSparkline(target.history);
+
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-700/50 hover:bg-white/5 transition group";
+                
+                tr.innerHTML = `
+                    <td class="px-6 py-5">
+                        <div class="font-bold text-slate-200 truncate max-w-[200px] mb-0.5">${target.url}</div>
+                        <div class="text-[9px] text-slate-500 uppercase font-extrabold tracking-widest">
+                            ${isMonitoring ? '<span class="text-blue-400 animate-pulse">Monitoring...</span>' : 'Standby'}
+                        </div>
+                    </td>
+                    <td class="px-6 py-5">
+                        <div class="flex items-center gap-3">
+                            <div class="traffic-light light-${target.status} ${isMonitoring && target.status === 'green' ? 'pulse' : ''}"></div>
+                            <span class="text-xs font-bold uppercase tracking-wider ${target.status === 'red' ? 'text-red-400' : (target.status === 'amber' ? 'text-amber-400' : (target.status === 'green' ? 'text-emerald-400' : 'text-slate-500'))}">
+                                ${target.status}
+                            </span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-5 mono text-xs">
+                        <span class="${target.latency > 0 ? 'text-slate-300' : 'text-slate-600'}">
+                            ${target.latency > 0 ? target.latency + 'ms' : '--'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-5">
+                        ${sparkline}
+                        <div class="flex justify-between text-[8px] text-slate-600 uppercase font-bold mt-1">
+                            <span>Last 60s</span>
+                            <span>Drops: ${drops30s}/${drops60s}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-5 text-right">
+                        <button onclick="removeTarget('${target.id}')" class="p-2 rounded-lg hover:bg-red-500/10 text-slate-600 hover:text-red-400 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                        </button>
+                    </td>
+                `;
+                monitorBody.appendChild(tr);
+            });
+        }
+
+        function generateSparkline(history) {
+            const maxPoints = 20;
+            const recent = history.slice(-maxPoints);
+            if (recent.length === 0) return `<div class="w-32 h-6 bg-slate-800/50 rounded flex items-center justify-center text-[8px] text-slate-700 font-bold uppercase tracking-widest">No Data</div>`;
+            
+            const width = 120;
+            const height = 24;
+            const step = width / (maxPoints - 1);
+            
+            // Map latency to Y coordinate (0 to height)
+            // Normalized against 1000ms as "top"
+            const points = recent.map((p, i) => {
+                const x = i * step;
+                if (!p.success) return `${x},${height}`;
+                const val = Math.min(p.latency, 1000);
+                const y = height - ((val / 1000) * height);
+                return `${x},${y}`;
+            }).join(' ');
+
+            return `
+                <svg width="${width}" height="${height}" class="overflow-visible">
+                    <polyline points="${points}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    ${recent.map((p, i) => `
+                        <circle cx="${i * step}" cy="${!p.success ? height : height - (Math.min(p.latency, 1000) / 1000 * height)}" r="2" fill="${p.success ? '#3b82f6' : '#ef4444'}" />
+                    `).join('')}
+                </svg>
+            `;
+        }
+
+        async function pingTarget(target) {
+            const start = performance.now();
+            let success = false;
+            let latency = 0;
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+                await fetch(target.url, { 
+                    mode: 'no-cors', 
+                    cache: 'no-cache',
+                    signal: controller.signal 
+                });
+                
+                clearTimeout(timeoutId);
+                latency = Math.round(performance.now() - start);
+                success = true;
+            } catch (err) {
+                success = false;
+            }
+
+            target.history.push({ timestamp: Date.now(), success, latency });
+            target.latency = success ? latency : 0;
+
+            const cutoff = Date.now() - 65000;
+            target.history = target.history.filter(h => h.timestamp > cutoff);
+            
+            const oldStatus = target.status;
+            evaluateHealth(target);
+            
+            if (oldStatus !== target.status && oldStatus !== 'off') {
+                addLog(`${target.url} changed from ${oldStatus} to ${target.status}`, target.status);
+            }
+        }
+
+        function evaluateHealth(target) {
+            const now = Date.now();
+            const drops30s = target.history.filter(h => !h.success && (now - h.timestamp) < 30000).length;
+            const drops60s = target.history.filter(h => !h.success && (now - h.timestamp) < 60000).length;
+
+            if (drops60s > 10) target.status = 'red';
+            else if (drops30s > 3) target.status = 'amber';
+            else target.status = 'green';
+        }
+
+        async function performPoll() {
+            if (!isMonitoring) return;
+            await Promise.all(targets.map(t => pingTarget(t)));
+            renderTable();
+            updateStats();
+        }
+
+        function toggleMonitoring() {
+            isMonitoring = !isMonitoring;
+            if (isMonitoring) {
+                toggleText.innerText = "Stop Monitoring";
+                toggleBtn.className = "bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-red-900/40 transition-all flex items-center gap-2";
+                addLog("Monitoring system started", "info");
+                performPoll(); 
+                monitorInterval = setInterval(performPoll, PING_INTERVAL);
+            } else {
+                toggleText.innerText = "Start Monitoring";
+                toggleBtn.className = "bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-emerald-900/20 transition-all flex items-center gap-2";
+                clearInterval(monitorInterval);
+                targets.forEach(t => { t.status = 'off'; t.latency = 0; });
+                addLog("Monitoring system paused", "info");
+                renderTable();
+            }
+        }
+
+        function updateStats() {
+            const total = targets.length;
+            statTotal.innerText = `${total}/5`;
+            statBar.style.width = `${(total / 5) * 100}%`;
+            statHealthy.innerText = targets.filter(t => t.status === 'green').length;
+            statCritical.innerText = targets.filter(t => t.status === 'red').length;
+        }
+
+        function checkLimit() {
+            if (targets.length >= MAX_TARGETS) {
+                limitWarning.classList.remove('hidden');
+                addBtn.disabled = true;
+                addBtn.classList.add('opacity-40', 'cursor-not-allowed');
+            } else {
+                limitWarning.classList.add('hidden');
+                addBtn.disabled = false;
+                addBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+            }
+        }
+
+        function addLog(msg, type) {
+            const entry = document.createElement('div');
+            const time = new Date().toLocaleTimeString([], { hour12: false });
+            
+            let color = 'text-slate-400';
+            if (type === 'red') color = 'text-red-400';
+            if (type === 'amber') color = 'text-amber-400';
+            if (type === 'green') color = 'text-emerald-400';
+            if (type === 'info') color = 'text-blue-400';
+
+            entry.innerHTML = `<span class="text-slate-600">[${time}]</span> <span class="${color}">${msg}</span>`;
+            
+            if (logContainer.children[0] && logContainer.children[0].innerText.includes("No activity")) {
+                logContainer.innerHTML = '';
+            }
+            
+            logContainer.prepend(entry);
+            if (logContainer.children.length > 50) logContainer.lastChild.remove();
+        }
+
+        // --- Persistence ---
+
+        function saveConfig() {
+            const config = {
+                urls: targets.map(t => t.url),
+                autoStart: autoStartCheck.checked
+            };
+            localStorage.setItem('netpulse_pro_config', JSON.stringify(config));
+            showToast("Settings Saved", "emerald");
+        }
+
+        function loadConfig() {
+            const saved = localStorage.getItem('netpulse_pro_config');
+            if (saved) {
+                try {
+                    const config = JSON.parse(saved);
+                    if (config.urls) {
+                        targets = config.urls.map(url => ({
+                            id: generateId(),
+                            url,
+                            history: [],
+                            status: 'off',
+                            latency: 0
+                        }));
+                    }
+                    autoStartCheck.checked = !!config.autoStart;
+                    setTimeout(() => showToast("Configuration Restored", "blue"), 400);
+                } catch (e) { console.error(e); }
+            }
+        }
+
+        function showToast(msg, color) {
+            toastMsg.innerText = msg;
+            toast.style.borderColor = color === 'red' ? '#ef4444' : (color === 'emerald' ? '#10b981' : '#3b82f6');
+            toast.classList.remove('opacity-0', 'translate-y-10');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-10');
+                toast.classList.remove('opacity-100', 'translate-y-0');
+            }, 3000);
+        }
+
+        // --- Events ---
+        addBtn.addEventListener('click', addTarget);
+        urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') addTarget(); });
+        saveBtn.addEventListener('click', saveConfig);
+        toggleBtn.addEventListener('click', toggleMonitoring);
+        clearLogBtn.addEventListener('click', () => {
+            logContainer.innerHTML = '<div class="text-slate-600 italic">Logs cleared...</div>';
+        });
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
