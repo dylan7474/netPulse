@@ -77,6 +77,17 @@ function Normalize-TargetHost {
 
 function Update-Health {
     param($Target)
+
+    function Get-SampleLatency {
+        param($Sample)
+
+        if ($null -eq $Sample) { return $null }
+        if ($Sample -is [System.Collections.IDictionary]) {
+            return $Sample["Latency"]
+        }
+
+        return $Sample.Latency
+    }
     
     $Now = [DateTime]::Now
     # Ensure History stays an array to prevent "unwrapping" errors
@@ -92,7 +103,12 @@ function Update-Health {
         100
     }
     $AvgLatency = if ($SuccessfulSamples.Count -gt 0) {
-        [Math]::Round((($SuccessfulSamples | Measure-Object -Property Latency -Average).Average), 1)
+        $LatencyValues = @($SuccessfulSamples | ForEach-Object { Get-SampleLatency $_ } | Where-Object { $null -ne $_ })
+        if ($LatencyValues.Count -gt 0) {
+            [Math]::Round((($LatencyValues | Measure-Object -Average).Average), 1)
+        } else {
+            0
+        }
     } else {
         0
     }
@@ -357,9 +373,9 @@ $Timer.Add_Tick({
                 $Result = $Ping.Send($Target.Host, $PingTimeoutMs)
                 $Success = ($Result.Status -eq "Success")
                 $Target.LastLatency = if ($Success) { $Result.RoundtripTime } else { 0 }
-                $Target.History += @(@{ Timestamp = [DateTime]::Now; Success = $Success; Latency = $Target.LastLatency })
+                $Target.History += @([PSCustomObject]@{ Timestamp = [DateTime]::Now; Success = $Success; Latency = $Target.LastLatency })
             } catch {
-                $Target.History += @(@{ Timestamp = [DateTime]::Now; Success = $false; Latency = 0 })
+                $Target.History += @([PSCustomObject]@{ Timestamp = [DateTime]::Now; Success = $false; Latency = 0 })
                 $Target.LastLatency = 0
             } finally {
                 $Ping.Dispose()
