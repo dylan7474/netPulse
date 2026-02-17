@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+missing=0
+
+check_cmd() {
+  local cmd="$1"
+  local hint="$2"
+
+  if command -v "$cmd" >/dev/null 2>&1; then
+    echo "[ok] $cmd"
+  else
+    echo "[missing] $cmd"
+    echo "         hint: $hint"
+    missing=1
+  fi
+}
+
+echo "Checking essential build tools..."
+check_cmd bash "Install bash (e.g. apt install bash / brew install bash)."
+check_cmd make "Install GNU Make (e.g. apt install make / brew install make)."
+check_cmd python3 "Install Python 3 (e.g. apt install python3 / brew install python)."
+check_cmd sed "Install sed via coreutils or system package manager."
+
+if [[ ! -f index.html ]]; then
+  echo "[missing] index.html"
+  echo "         hint: run this script from the project root."
+  missing=1
+else
+  echo "[ok] index.html present"
+fi
+
+if [[ "$missing" -ne 0 ]]; then
+  echo
+  echo "One or more required tools/files are missing."
+  exit 1
+fi
+
+echo
+
+echo "Environment looks good. You can now run: make verify"
