@@ -47,9 +47,11 @@ powershell -ExecutionPolicy Bypass -File .\netpulse.ps1
 
 - **Add**: Accepts hostname, IP, or URL input. Invalid values are rejected and logged.
 - **Duplicate prevention**: Targets are deduplicated by host.
-- **Start Monitoring / Stop Monitoring**: Runs ICMP checks every 3 seconds.
+- **Start Monitoring / Stop Monitoring**: Runs ICMP checks every 3 seconds (1500ms timeout per ping by default).
 - **Save Config**: Persists target URLs to `netpulse_config.json` next to the script.
 - **Auto-load on launch**: Restores saved targets when `netpulse_config.json` exists.
+- **Quick add shortcut**: Press **Enter** in the input box to add a target.
+- **Per-target stats**: Shows current latency, 60-second average latency, and recent uptime percentage.
 - **Health light logic**:
   - Green: normal packet success in the last 30/60 seconds.
   - Amber: more than 3 drops in the last 30 seconds.

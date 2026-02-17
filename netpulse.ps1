@@ -13,6 +13,8 @@ $MaxTargets = 5
 $Global:IsMonitoring = $false
 $Global:Targets = @() # Array of objects
 $PingInterval = 3000 # 3 seconds
+$PingTimeoutMs = 1500
+$GraphPointLimit = 20
 
 # --- Logic Functions ---
 
@@ -28,21 +30,29 @@ function Write-Log {
 }
 
 function Save-Config {
-    $Urls = $Global:Targets | Select-Object -ExpandProperty URL
-    $Urls | ConvertTo-Json | Out-File $ConfigFile -Encoding utf8
-    Write-Log "Configuration saved to disk." "LimeGreen"
+    try {
+        $Urls = $Global:Targets | Select-Object -ExpandProperty URL
+        $Urls | ConvertTo-Json | Out-File $ConfigFile -Encoding utf8
+        Write-Log "Configuration saved to disk." "LimeGreen"
+    } catch {
+        Write-Log "Failed to save config: $($_.Exception.Message)"
+    }
 }
 
 function Load-Config {
-    if (Test-Path $ConfigFile) {
-        $Urls = Get-Content $ConfigFile -Raw | ConvertFrom-Json
-        $Urls = @($Urls)
-        foreach ($Url in $Urls) {
-            if ($Global:Targets.Count -lt $MaxTargets) {
-                Add-TargetToUI $Url
+    try {
+        if (Test-Path $ConfigFile) {
+            $Urls = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+            $Urls = @($Urls)
+            foreach ($Url in $Urls) {
+                if ($Global:Targets.Count -lt $MaxTargets) {
+                    Add-TargetToUI $Url
+                }
             }
+            Write-Log "Auto-loaded configuration for $($Global:Targets.Count) targets." "DeepSkyBlue"
         }
-        Write-Log "Auto-loaded configuration for $($Global:Targets.Count) targets." "DeepSkyBlue"
+    } catch {
+        Write-Log "Failed to load config: $($_.Exception.Message)"
     }
 }
 
@@ -72,8 +82,20 @@ function Update-Health {
     # Ensure History stays an array to prevent "unwrapping" errors
     $Target.History = @($Target.History | Where-Object { ($Now - $_.Timestamp).TotalSeconds -lt 60 })
     
-    $Drops30s = ($Target.History | Where-Object { !$_.Success -and ($Now - $_.Timestamp).TotalSeconds -lt 30 }).Count
+    $Window30s = @($Target.History | Where-Object { ($Now - $_.Timestamp).TotalSeconds -lt 30 })
+    $Drops30s = ($Window30s | Where-Object { !$_.Success }).Count
     $Drops60s = ($Target.History | Where-Object { !$_.Success }).Count
+    $SuccessfulSamples = @($Target.History | Where-Object { $_.Success })
+    $SuccessPct = if ($Target.History.Count -gt 0) {
+        [Math]::Round((($Target.History.Count - $Drops60s) / [double]$Target.History.Count) * 100)
+    } else {
+        100
+    }
+    $AvgLatency = if ($SuccessfulSamples.Count -gt 0) {
+        [Math]::Round((($SuccessfulSamples | Measure-Object -Property Latency -Average).Average), 1)
+    } else {
+        0
+    }
 
     $OldStatus = $Target.Status
     $NewStatus = "Green"
@@ -96,7 +118,7 @@ function Update-Health {
     $Target.Status = $NewStatus
     
     $LatencyStr = if ($Target.LastLatency -gt 0) { "$($Target.LastLatency)ms" } else { "TIMEOUT" }
-    $Target.StatusLabel.Text = "Lat: $LatencyStr | Drops: $Drops30s/30s"
+    $Target.StatusLabel.Text = "Lat: $LatencyStr | Avg60: ${AvgLatency}ms | Up: ${SuccessPct}%"
     
     # Force the PictureBox to repaint
     $Target.GraphBox.Invalidate()
@@ -267,14 +289,13 @@ function Add-TargetToUI {
         $historyData = @($obj.History)
         if ($historyData.Count -lt 2) { return }
 
-        $MaxPoints = 20
-        $Recent = @($historyData | Select-Object -Last $MaxPoints)
+        $Recent = @($historyData | Select-Object -Last $GraphPointLimit)
         
         $Width = [float]$sender.Width
         $Height = [float]$sender.Height
         # Scale 0-300ms for better visual movement on fast networks
         $ScaleCeiling = 300.0
-        $Step = $Width / ($MaxPoints - 1)
+        $Step = $Width / ($GraphPointLimit - 1)
         
         $Pen = New-Object System.Drawing.Pen([System.Drawing.Color]::DeepSkyBlue, 2)
         $FailBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::Red)
@@ -333,13 +354,15 @@ $Timer.Add_Tick({
         foreach ($Target in $Global:Targets) {
             $Ping = New-Object System.Net.NetworkInformation.Ping
             try {
-                $Result = $Ping.Send($Target.Host, 1500)
+                $Result = $Ping.Send($Target.Host, $PingTimeoutMs)
                 $Success = ($Result.Status -eq "Success")
                 $Target.LastLatency = if ($Success) { $Result.RoundtripTime } else { 0 }
                 $Target.History += @(@{ Timestamp = [DateTime]::Now; Success = $Success; Latency = $Target.LastLatency })
             } catch {
                 $Target.History += @(@{ Timestamp = [DateTime]::Now; Success = $false; Latency = 0 })
                 $Target.LastLatency = 0
+            } finally {
+                $Ping.Dispose()
             }
             Update-Health $Target
         }
@@ -363,6 +386,14 @@ $AddBtn.Add_Click({
 
         Add-TargetToUI $UrlInput.Text.Trim()
         $UrlInput.Text = ""
+    }
+})
+
+$UrlInput.Add_KeyDown({
+    param($sender, $e)
+    if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Enter) {
+        $AddBtn.PerformClick()
+        $e.SuppressKeyPress = $true
     }
 })
 
