@@ -29,13 +29,14 @@ function Write-Log {
 
 function Save-Config {
     $Urls = $Global:Targets | Select-Object -ExpandProperty URL
-    $Urls | ConvertTo-Json | Out-File $ConfigFile
+    $Urls | ConvertTo-Json | Out-File $ConfigFile -Encoding utf8
     Write-Log "Configuration saved to disk." "LimeGreen"
 }
 
 function Load-Config {
     if (Test-Path $ConfigFile) {
-        $Urls = Get-Content $ConfigFile | ConvertFrom-Json
+        $Urls = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+        $Urls = @($Urls)
         foreach ($Url in $Urls) {
             if ($Global:Targets.Count -lt $MaxTargets) {
                 Add-TargetToUI $Url
@@ -43,6 +44,25 @@ function Load-Config {
         }
         Write-Log "Auto-loaded configuration for $($Global:Targets.Count) targets." "DeepSkyBlue"
     }
+}
+
+function Normalize-TargetHost {
+    param([string]$InputValue)
+
+    $Value = $InputValue.Trim()
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+
+    $Uri = $null
+    if ([System.Uri]::TryCreate($Value, [System.UriKind]::Absolute, [ref]$Uri)) {
+        return $Uri.Host
+    }
+
+    # Support hostnames and IPs entered without a URL scheme.
+    if ([System.Uri]::CheckHostName($Value) -ne [System.UriHostNameType]::Unknown) {
+        return $Value
+    }
+
+    return $null
 }
 
 function Update-Health {
@@ -222,6 +242,7 @@ function Add-TargetToUI {
 
     $TargetObj = [PSCustomObject]@{
         URL         = $Url
+        Host        = (Normalize-TargetHost $Url)
         History     = @()
         Light       = $Light
         StatusLabel = $Stat
@@ -312,9 +333,7 @@ $Timer.Add_Tick({
         foreach ($Target in $Global:Targets) {
             $Ping = New-Object System.Net.NetworkInformation.Ping
             try {
-                # Extract hostname for ICMP
-                $CleanUrl = $Target.URL -replace "https?://", "" -replace "/.*", ""
-                $Result = $Ping.Send($CleanUrl, 1500)
+                $Result = $Ping.Send($Target.Host, 1500)
                 $Success = ($Result.Status -eq "Success")
                 $Target.LastLatency = if ($Success) { $Result.RoundtripTime } else { 0 }
                 $Target.History += @(@{ Timestamp = [DateTime]::Now; Success = $Success; Latency = $Target.LastLatency })
@@ -331,7 +350,18 @@ $Timer.Add_Tick({
 
 $AddBtn.Add_Click({
     if ($UrlInput.Text -ne "") {
-        Add-TargetToUI $UrlInput.Text
+        $Host = Normalize-TargetHost $UrlInput.Text
+        if ($null -eq $Host) {
+            Write-Log "Invalid target: enter a hostname, IP, or URL (e.g. 1.1.1.1 or https://example.com)."
+            return
+        }
+
+        if (($Global:Targets | Where-Object { $_.Host -eq $Host }).Count -gt 0) {
+            Write-Log "Target already added: $Host"
+            return
+        }
+
+        Add-TargetToUI $UrlInput.Text.Trim()
         $UrlInput.Text = ""
     }
 })

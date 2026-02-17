@@ -4,6 +4,8 @@ NetPulse Pro is a lightweight, browser-based network health monitor. It lets you
 
 Because the app is a static frontend (`index.html`), there is no backend service to install. You can open it directly in a browser or serve it locally with any static web server.
 
+This repository also includes `netpulse.ps1`, a Windows Forms PowerShell edition that performs real ICMP pings and draws a mini latency graph per target.
+
 ## Basic controls
 
 - **Add to Monitor**: Add an endpoint to the active watch list (up to 5).
@@ -36,6 +38,28 @@ This project ships with a `Makefile` and `configure` script to validate a minima
    ```
 
 4. Open `http://localhost:8080` in your browser.
+
+## PowerShell edition (`netpulse.ps1`)
+
+The PowerShell UI is intended for Windows PowerShell 5.1+ (or PowerShell 7 on Windows with WinForms support).
+
+### Run
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\netpulse.ps1
+```
+
+### Controls and behavior
+
+- **Add**: Accepts hostname, IP, or URL input. Invalid values are rejected and logged.
+- **Duplicate prevention**: Targets are deduplicated by host.
+- **Start Monitoring / Stop Monitoring**: Runs ICMP checks every 3 seconds.
+- **Save Config**: Persists target URLs to `netpulse_config.json` next to the script.
+- **Auto-load on launch**: Restores saved targets when `netpulse_config.json` exists.
+- **Health light logic**:
+  - Green: normal packet success in the last 30/60 seconds.
+  - Amber: more than 3 drops in the last 30 seconds.
+  - Red: more than 10 drops in the last 60 seconds.
 
 ## Roadmap
 
