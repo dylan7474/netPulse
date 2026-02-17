@@ -16,9 +16,8 @@ check_cmd() {
   fi
 }
 
-echo "Checking essential build tools..."
+echo "Checking essential runtime tools..."
 check_cmd bash "Install bash (e.g. apt install bash / brew install bash)."
-check_cmd make "Install GNU Make (e.g. apt install make / brew install make)."
 check_cmd python3 "Install Python 3 (e.g. apt install python3 / brew install python)."
 check_cmd sed "Install sed via coreutils or system package manager."
 
@@ -38,4 +37,4 @@ fi
 
 echo
 
-echo "Environment looks good. You can now run: make verify"
+echo "Environment looks good. You can now run: python3 -m http.server 8080"
