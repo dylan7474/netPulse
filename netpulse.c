@@ -330,8 +330,15 @@ static bool parse_probe_response(const char *response, double *latency_ms, bool 
     return true;
 }
 
+static bool is_valid_probe_url(const char *probe_url) {
+    if (probe_url == NULL || probe_url[0] == '\0') {
+        return false;
+    }
+    return g_str_has_prefix(probe_url, "http://") || g_str_has_prefix(probe_url, "https://");
+}
+
 static bool run_backend_probe(const char *backend_url, const char *target, double *latency_ms, bool *has_latency) {
-    if (backend_url == NULL || backend_url[0] == '\0') {
+    if (!is_valid_probe_url(backend_url)) {
         *has_latency = false;
         return false;
     }
@@ -342,9 +349,10 @@ static bool run_backend_probe(const char *backend_url, const char *target, doubl
     char query[512];
     snprintf(query, sizeof(query), "target=%s", target);
 
-    gchar *argv[] = {(gchar *)"curl",      (gchar *)"-fsS",      (gchar *)"--max-time",
-                     timeout_buf,           (gchar *)"-G",         (gchar *)"--data-urlencode",
-                     query,                 (gchar *)backend_url,   NULL};
+    gchar *argv[] = {(gchar *)"curl",           (gchar *)"-fsS",           (gchar *)"--connect-timeout",
+                     (gchar *)"1",              (gchar *)"--max-time",      timeout_buf,
+                     (gchar *)"-G",             (gchar *)"--data-urlencode", query,
+                     (gchar *)backend_url,       NULL};
 
     gchar *stdout_data = NULL;
     gchar *stderr_data = NULL;
@@ -500,7 +508,7 @@ static gboolean monitor_tick(gpointer user_data) {
         double latency = 0.0;
         bool has_latency = false;
         const char *probe_url = gtk_entry_get_text(app->probe_entry);
-        bool use_backend = probe_url != NULL && probe_url[0] != '\0';
+        bool use_backend = is_valid_probe_url(probe_url);
         bool success = false;
         if (use_backend) {
             success = run_backend_probe(probe_url, app->targets[i].display, &latency, &has_latency);
@@ -528,8 +536,10 @@ static void start_monitoring(AppState *app) {
     app->timer_id = g_timeout_add_seconds(app->interval_sec, monitor_tick, app);
     monitor_tick(app);
     const char *probe_url = gtk_entry_get_text(app->probe_entry);
-    if (probe_url != NULL && probe_url[0] != '\0') {
+    if (is_valid_probe_url(probe_url)) {
         log_message(app, "Monitoring started via backend probe (%s), interval %d sec.", probe_url, app->interval_sec);
+    } else if (probe_url != NULL && probe_url[0] != '\0') {
+        log_message(app, "Monitoring started with ICMP ping; probe backend must begin with http:// or https://.");
     } else {
         log_message(app, "Monitoring started (%d second interval).", app->interval_sec);
     }
