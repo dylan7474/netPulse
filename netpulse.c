@@ -41,13 +41,17 @@ typedef struct {
     GtkWidget *stats_label;
     GtkTextBuffer *log_buffer;
     GtkToggleButton *auto_start_toggle;
+    GtkEntry *probe_entry;
 
     Target targets[MAX_TARGETS];
     int target_count;
     int interval_sec;
     guint timer_id;
     bool monitoring;
+    char probe_backend_url[512];
 } AppState;
+
+static const int PROBE_TIMEOUT_SEC = 3;
 
 static void trim(char *s) {
     if (s == NULL) {
@@ -292,6 +296,85 @@ static bool run_ping(const char *host, double *latency_ms, bool *has_latency) {
     return exit_status == 0;
 }
 
+static bool parse_probe_response(const char *response, double *latency_ms, bool *has_latency) {
+    if (response == NULL) {
+        *has_latency = false;
+        return false;
+    }
+
+    const char *latency_key = strstr(response, "\"latency_ms\"");
+    if (latency_key != NULL) {
+        const char *colon = strchr(latency_key, ':');
+        if (colon != NULL) {
+            char *endptr = NULL;
+            double parsed = g_ascii_strtod(colon + 1, &endptr);
+            if (endptr != colon + 1) {
+                *latency_ms = parsed;
+                *has_latency = true;
+            }
+        }
+    }
+
+    const char *ok_true = strstr(response, "\"ok\":true");
+    const char *ok_false = strstr(response, "\"ok\":false");
+    const char *success_true = strstr(response, "\"success\":true");
+    const char *success_false = strstr(response, "\"success\":false");
+
+    if (ok_true != NULL || success_true != NULL) {
+        return true;
+    }
+    if (ok_false != NULL || success_false != NULL) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool run_backend_probe(const char *backend_url, const char *target, double *latency_ms, bool *has_latency) {
+    if (backend_url == NULL || backend_url[0] == '\0') {
+        *has_latency = false;
+        return false;
+    }
+
+    char timeout_buf[16];
+    snprintf(timeout_buf, sizeof(timeout_buf), "%d", PROBE_TIMEOUT_SEC);
+
+    char query[512];
+    snprintf(query, sizeof(query), "target=%s", target);
+
+    gchar *argv[] = {(gchar *)"curl",      (gchar *)"-fsS",      (gchar *)"--max-time",
+                     timeout_buf,           (gchar *)"-G",         (gchar *)"--data-urlencode",
+                     query,                 (gchar *)backend_url,   NULL};
+
+    gchar *stdout_data = NULL;
+    gchar *stderr_data = NULL;
+    gint exit_status = 1;
+    GError *error = NULL;
+
+    gboolean ok = g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, &stdout_data, &stderr_data,
+                               &exit_status, &error);
+    if (!ok) {
+        if (error != NULL) {
+            g_error_free(error);
+        }
+        g_free(stdout_data);
+        g_free(stderr_data);
+        *has_latency = false;
+        return false;
+    }
+
+    bool success = false;
+    if (exit_status == 0) {
+        success = parse_probe_response(stdout_data, latency_ms, has_latency);
+    } else {
+        *has_latency = false;
+    }
+
+    g_free(stdout_data);
+    g_free(stderr_data);
+    return success;
+}
+
 static void refresh_table(AppState *app) {
     gtk_list_store_clear(app->store);
 
@@ -330,6 +413,8 @@ static bool save_config(AppState *app, const char *path) {
     }
 
     fprintf(f, "# auto_start=%d\n", gtk_toggle_button_get_active(app->auto_start_toggle) ? 1 : 0);
+    const char *probe_url = gtk_entry_get_text(app->probe_entry);
+    fprintf(f, "# probe_backend=%s\n", probe_url);
     for (int i = 0; i < app->target_count; ++i) {
         fprintf(f, "%s\n", app->targets[i].display);
     }
@@ -392,6 +477,9 @@ static bool load_config(AppState *app, const char *path) {
             if (strncmp(line, "# auto_start=", 13) == 0) {
                 int val = atoi(line + 13);
                 gtk_toggle_button_set_active(app->auto_start_toggle, val != 0);
+            } else if (strncmp(line, "# probe_backend=", 16) == 0) {
+                snprintf(app->probe_backend_url, sizeof(app->probe_backend_url), "%s", line + 16);
+                gtk_entry_set_text(app->probe_entry, app->probe_backend_url);
             }
             continue;
         }
@@ -411,7 +499,14 @@ static gboolean monitor_tick(gpointer user_data) {
     for (int i = 0; i < app->target_count; ++i) {
         double latency = 0.0;
         bool has_latency = false;
-        bool success = run_ping(app->targets[i].host, &latency, &has_latency);
+        const char *probe_url = gtk_entry_get_text(app->probe_entry);
+        bool use_backend = probe_url != NULL && probe_url[0] != '\0';
+        bool success = false;
+        if (use_backend) {
+            success = run_backend_probe(probe_url, app->targets[i].display, &latency, &has_latency);
+        } else {
+            success = run_ping(app->targets[i].host, &latency, &has_latency);
+        }
         add_history(&app->targets[i], success, latency, has_latency);
         compute_status(&app->targets[i]);
     }
@@ -432,7 +527,12 @@ static void start_monitoring(AppState *app) {
     app->monitoring = true;
     app->timer_id = g_timeout_add_seconds(app->interval_sec, monitor_tick, app);
     monitor_tick(app);
-    log_message(app, "Monitoring started (%d second interval).", app->interval_sec);
+    const char *probe_url = gtk_entry_get_text(app->probe_entry);
+    if (probe_url != NULL && probe_url[0] != '\0') {
+        log_message(app, "Monitoring started via backend probe (%s), interval %d sec.", probe_url, app->interval_sec);
+    } else {
+        log_message(app, "Monitoring started (%d second interval).", app->interval_sec);
+    }
 }
 
 static void stop_monitoring(AppState *app) {
@@ -562,6 +662,15 @@ static GtkWidget *build_ui(AppState *app) {
     gtk_box_pack_start(GTK_BOX(controls), save_btn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(controls), GTK_WIDGET(app->auto_start_toggle), FALSE, FALSE, 0);
 
+    GtkWidget *probe_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_start(GTK_BOX(root), probe_row, FALSE, FALSE, 0);
+    GtkWidget *probe_label = gtk_label_new("Probe backend (optional)");
+    gtk_widget_set_halign(probe_label, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(probe_row), probe_label, FALSE, FALSE, 0);
+    app->probe_entry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_placeholder_text(app->probe_entry, "http://localhost:8787/probe");
+    gtk_box_pack_start(GTK_BOX(probe_row), GTK_WIDGET(app->probe_entry), TRUE, TRUE, 0);
+
     app->store = gtk_list_store_new(5, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     app->tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(app->store));
     gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(app->tree), TRUE);
@@ -614,6 +723,7 @@ static void print_usage(const char *prog) {
             "Options:\n"
             "  -i <seconds>    Ping interval in seconds (default: %d)\n"
             "  -f <file>       Load targets from file (one per line)\n"
+            "  -b <url>        Optional backend probe endpoint URL\n"
             "  -h              Show this help\n",
             prog, DEFAULT_INTERVAL_SEC);
 }
@@ -624,8 +734,9 @@ int main(int argc, char **argv) {
     app.interval_sec = DEFAULT_INTERVAL_SEC;
 
     const char *input_file = NULL;
+    bool backend_from_cli = false;
     int opt;
-    while ((opt = getopt(argc, argv, "hi:f:")) != -1) {
+    while ((opt = getopt(argc, argv, "hi:f:b:")) != -1) {
         switch (opt) {
         case 'h':
             print_usage(argv[0]);
@@ -640,6 +751,10 @@ int main(int argc, char **argv) {
         case 'f':
             input_file = optarg;
             break;
+        case 'b':
+            snprintf(app.probe_backend_url, sizeof(app.probe_backend_url), "%s", optarg);
+            backend_from_cli = true;
+            break;
         default:
             print_usage(argv[0]);
             return 1;
@@ -648,6 +763,10 @@ int main(int argc, char **argv) {
 
     gtk_init(&argc, &argv);
     app.window = build_ui(&app);
+
+    if (app.probe_backend_url[0] != '\0') {
+        gtk_entry_set_text(app.probe_entry, app.probe_backend_url);
+    }
 
     for (int i = optind; i < argc; ++i) {
         append_target(&app, argv[i], false);
@@ -659,6 +778,10 @@ int main(int argc, char **argv) {
 
     if (load_config(&app, CONFIG_PATH)) {
         log_message(&app, "Loaded saved configuration from %s", CONFIG_PATH);
+    }
+
+    if (backend_from_cli) {
+        gtk_entry_set_text(app.probe_entry, app.probe_backend_url);
     }
 
     refresh_table(&app);

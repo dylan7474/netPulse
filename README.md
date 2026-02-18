@@ -84,6 +84,7 @@ You can optionally seed targets from CLI arguments or a config file:
 ```bash
 ./netpulse-c github.com 1.1.1.1
 ./netpulse-c -f targets.txt
+./netpulse-c -b http://localhost:8787/probe
 ```
 
 ### Controls and behavior
@@ -91,6 +92,7 @@ You can optionally seed targets from CLI arguments or a config file:
 - **Add**: Accepts hostname, IP, or URL.
 - **Duplicate prevention**: Targets are deduplicated by normalized host.
 - **Start Monitoring / Stop Monitoring**: Runs ICMP checks every 3 seconds (`ping -c 1 -W 1` by default, configurable with `-i`).
+- **Probe backend (optional)**: When set (or provided via `-b`), checks are sent to a backend probe endpoint using `curl` with `target=<url_or_host>` query parameter instead of direct local ICMP ping.
 - **Save**: Persists targets plus Auto-Start preference to `netpulse_c_config.txt`.
 - **Auto-Start**: Starts monitoring on launch when saved targets exist.
 - **Remove Selected**: Removes one or more selected targets from the table.
@@ -124,7 +126,6 @@ python3 netpulse.py
 
 ## Roadmap
 
-- Add optional real endpoint probing through a small backend service.
 - Add configurable check intervals and timeout values in the UI.
 - Export and import monitoring profiles as JSON.
 - Add lightweight automated UI tests for key controls.
