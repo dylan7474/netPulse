@@ -18,7 +18,7 @@ serve:
 	@python3 -m http.server 8080
 
 build-c:
-	@gcc -O2 -Wall -Wextra -std=c11 netpulse.c -o netpulse-c
+	@gcc -O2 -Wall -Wextra -std=c11 netpulse.c -o netpulse-c $(shell pkg-config --cflags --libs gtk+-3.0)
 	@echo "Built ./netpulse-c"
 
 

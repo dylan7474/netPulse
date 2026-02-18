@@ -20,6 +20,8 @@ echo "Checking essential runtime tools..."
 check_cmd bash "Install bash (e.g. apt install bash / brew install bash)."
 check_cmd python3 "Install Python 3 (e.g. apt install python3 / brew install python)."
 check_cmd sed "Install sed via coreutils or system package manager."
+check_cmd pkg-config "Install pkg-config (e.g. apt install pkg-config)."
+check_cmd ping "Install iputils-ping (e.g. apt install iputils-ping)."
 
 if [[ ! -f index.html ]]; then
   echo "[missing] index.html"
@@ -27,6 +29,17 @@ if [[ ! -f index.html ]]; then
   missing=1
 else
   echo "[ok] index.html present"
+fi
+
+
+if command -v pkg-config >/dev/null 2>&1; then
+  if pkg-config --exists gtk+-3.0; then
+    echo "[ok] gtk+-3.0 development files"
+  else
+    echo "[missing] gtk+-3.0 development files"
+    echo "         hint: install libgtk-3-dev (Debian/Ubuntu) or gtk3-devel (Fedora)."
+    missing=1
+  fi
 fi
 
 if [[ "$missing" -ne 0 ]]; then
@@ -37,4 +50,4 @@ fi
 
 echo
 
-echo "Environment looks good. You can now run: python3 -m http.server 8080"
+echo "Environment looks good. You can now run: python3 -m http.server 8080 or make build-c"

@@ -8,7 +8,7 @@ This repository also includes `netpulse.ps1`, a Windows Forms PowerShell edition
 
 For Linux desktops, the repository also includes `netpulse.py`, a Tkinter edition that runs as a native GUI app on most distributions with Python 3 and Tk installed.
 
-For users who prefer a compiled binary, `netpulse.c` provides a zero-dependency C monitor that can be built into a Linux executable with `gcc`.
+For users who prefer a compiled binary, `netpulse.c` provides a native GTK desktop GUI that mirrors the Python workflow and can be built into a Linux executable with `gcc`.
 
 ## Basic controls
 
@@ -63,7 +63,7 @@ powershell -ExecutionPolicy Bypass -File .\netpulse.ps1
 
 ## C edition (`netpulse.c`)
 
-The C edition is a terminal monitor designed for Linux environments where you want a single compiled executable.
+The C edition is now a Linux GTK desktop app with controls comparable to the Python GUI.
 
 ### Build
 
@@ -71,30 +71,35 @@ The C edition is a terminal monitor designed for Linux environments where you wa
 make build-c
 ```
 
-(Equivalent manual command: `gcc -O2 -Wall -Wextra -std=c11 netpulse.c -o netpulse-c`)
+The build uses `pkg-config --cflags --libs gtk+-3.0`, so you need GTK 3 development packages installed (for example `libgtk-3-dev` on Debian/Ubuntu).
 
 ### Run
 
 ```bash
-./netpulse-c github.com 1.1.1.1
+./netpulse-c
 ```
 
-Or load targets from a file (one target per line):
+You can optionally seed targets from CLI arguments or a config file:
 
 ```bash
+./netpulse-c github.com 1.1.1.1
 ./netpulse-c -f targets.txt
 ```
 
 ### Controls and behavior
 
-- Monitors up to 5 targets, deduplicated by host.
-- Uses `ping -c 1 -W 1` every 3 seconds by default.
-- Prints current status, current latency, average latency (60s), and uptime (60s).
-- Health status thresholds match the Python/PowerShell logic:
+- **Add**: Accepts hostname, IP, or URL.
+- **Duplicate prevention**: Targets are deduplicated by normalized host.
+- **Start Monitoring / Stop Monitoring**: Runs ICMP checks every 3 seconds (`ping -c 1 -W 1` by default, configurable with `-i`).
+- **Save**: Persists targets plus Auto-Start preference to `netpulse_c_config.txt`.
+- **Auto-Start**: Starts monitoring on launch when saved targets exist.
+- **Remove Selected**: Removes one or more selected targets from the table.
+- **Quick add shortcut**: Press **Enter** in the input box to add a target.
+- **Per-target stats**: Shows current latency, 60-second average latency, and recent uptime percentage.
+- **Health status thresholds** match the Python/PowerShell logic:
   - Green: normal packet success in the last 30/60 seconds.
   - Amber: more than 3 drops in the last 30 seconds.
   - Red: more than 10 drops in the last 60 seconds.
-- Stop monitoring with `Ctrl+C`.
 
 ## Python GUI edition (`netpulse.py`)
 
