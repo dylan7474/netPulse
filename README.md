@@ -8,6 +8,8 @@ This repository also includes `netpulse.ps1`, a Windows Forms PowerShell edition
 
 For Linux desktops, the repository also includes `netpulse.py`, a Tkinter edition that runs as a native GUI app on most distributions with Python 3 and Tk installed.
 
+For users who prefer a compiled binary, `netpulse.c` provides a zero-dependency C monitor that can be built into a Linux executable with `gcc`.
+
 ## Basic controls
 
 - **Add to Monitor**: Add an endpoint to the active watch list (up to 5).
@@ -58,6 +60,41 @@ powershell -ExecutionPolicy Bypass -File .\netpulse.ps1
   - Green: normal packet success in the last 30/60 seconds.
   - Amber: more than 3 drops in the last 30 seconds.
   - Red: more than 10 drops in the last 60 seconds.
+
+## C edition (`netpulse.c`)
+
+The C edition is a terminal monitor designed for Linux environments where you want a single compiled executable.
+
+### Build
+
+```bash
+make build-c
+```
+
+(Equivalent manual command: `gcc -O2 -Wall -Wextra -std=c11 netpulse.c -o netpulse-c`)
+
+### Run
+
+```bash
+./netpulse-c github.com 1.1.1.1
+```
+
+Or load targets from a file (one target per line):
+
+```bash
+./netpulse-c -f targets.txt
+```
+
+### Controls and behavior
+
+- Monitors up to 5 targets, deduplicated by host.
+- Uses `ping -c 1 -W 1` every 3 seconds by default.
+- Prints current status, current latency, average latency (60s), and uptime (60s).
+- Health status thresholds match the Python/PowerShell logic:
+  - Green: normal packet success in the last 30/60 seconds.
+  - Amber: more than 3 drops in the last 30 seconds.
+  - Red: more than 10 drops in the last 60 seconds.
+- Stop monitoring with `Ctrl+C`.
 
 ## Python GUI edition (`netpulse.py`)
 
