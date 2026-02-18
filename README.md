@@ -6,6 +6,8 @@ Because the app is a static frontend (`index.html`), there is no backend service
 
 This repository also includes `netpulse.ps1`, a Windows Forms PowerShell edition that performs real ICMP pings and draws a mini latency graph per target.
 
+For Linux desktops, the repository also includes `netpulse.py`, a Tkinter edition that runs as a native GUI app on most distributions with Python 3 and Tk installed.
+
 ## Basic controls
 
 - **Add to Monitor**: Add an endpoint to the active watch list (up to 5).
@@ -56,6 +58,27 @@ powershell -ExecutionPolicy Bypass -File .\netpulse.ps1
   - Green: normal packet success in the last 30/60 seconds.
   - Amber: more than 3 drops in the last 30 seconds.
   - Red: more than 10 drops in the last 60 seconds.
+
+## Python GUI edition (`netpulse.py`)
+
+The Python desktop UI is intended for Linux systems with a graphical environment.
+
+### Run
+
+```bash
+python3 netpulse.py
+```
+
+### Controls and behavior
+
+- **Add**: Accepts hostname, IP, or URL.
+- **Duplicate prevention**: Targets are deduplicated by host.
+- **Start Monitoring / Stop Monitoring**: Runs ICMP checks every 3 seconds (`ping -c 1 -W 1`).
+- **Save**: Persists targets and Auto-Start state to `netpulse_py_config.json`.
+- **Auto-Start**: Begins monitoring automatically when saved targets exist.
+- **Remove Selected**: Removes one or more selected targets from the table.
+- **Quick add shortcut**: Press **Enter** in the input box to add a target.
+- **Per-target stats**: Shows current latency, 60-second average latency, and recent uptime percentage.
 
 ## Roadmap
 
